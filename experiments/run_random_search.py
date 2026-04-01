@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 from problems.problem_wrapper import SphereProblem
 from optimizers.random_search import run_random_search
@@ -28,6 +30,27 @@ def main():
     print("Mean convergence curve:", summary["mean_curve"])
     print("Median convergence curve:", summary["median_curve"])
 
+    x_axis = np.arange(1, budget + 1)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(x_axis, summary["mean_curve"], label="Mean best-so-far")
+    plt.plot(x_axis, summary["median_curve"], label="Median best-so-far")
+    plt.xlabel("Počet evaluácií")
+    plt.ylabel("Best-so-far hodnota")
+    plt.title("Random Search – convergence")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+
+    output_dir = Path("results")
+    output_dir.mkdir(exist_ok=True)
+
+    figure_path = output_dir / "random_search_convergence.png"
+    plt.savefig(figure_path, dpi=150, bbox_inches="tight")
+    print(f"Graf uložený do: {figure_path}")
+
+    plt.close()
+    
 
 if __name__ == "__main__":
     main()
