@@ -1,6 +1,11 @@
 from __future__ import annotations
-
+import logging
+import io
+import os
 import pickle
+import time
+import warnings
+from contextlib import redirect_stdout, redirect_stderr
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -9,10 +14,8 @@ import numpy as np
 from scipy.spatial import cKDTree
 from pybads import BADS
 
-
 class BudgetReached(Exception):
     pass
-
 
 @dataclass
 class PyBADSLAQNResult:
@@ -23,6 +26,8 @@ class PyBADSLAQNResult:
     x_hist: list[list[float]]
     y_hist: list[float]
     eval_count: int
+    evals_to_f_best: int
+    total_time: float
     deviation_from_optimum: float
     optimum: float
     optimum_x: list[float]
@@ -31,12 +36,10 @@ class PyBADSLAQNResult:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-
 def load_problem(problem_path: str | Path):
     problem_path = Path(problem_path)
     with problem_path.open("rb") as f:
         return pickle.load(f)
-
 
 class LAQNPyBADSObjective:
     """
@@ -87,7 +90,6 @@ class LAQNPyBADSObjective:
         for x0, y0 in zip(xx0, yy0):
             idx = self._snap_to_index(x0)
 
-            # ak už tento snapped bod máme, neuložíme ho druhýkrát
             if idx in self.cache:
                 continue
 
@@ -110,14 +112,24 @@ class LAQNPyBADSObjective:
         _, idx = self.tree.query(x, k=1)
         return int(idx)
 
+    def sample_unseen_point(self) -> np.ndarray:
+        """
+        Náhodne vyberie ešte nevyhodnotený bod z domain.
+        Ak už sú všetky body vyhodnotené, vyhodí chybu.
+        """
+        unseen_indices = [i for i in range(len(self.domain)) if i not in self.cache]
+        if not unseen_indices:
+            raise BudgetReached("Všetky body z domain už boli vyhodnotené.")
+
+        idx = int(np.random.choice(unseen_indices))
+        return self.domain[idx].copy()
+
     def __call__(self, x: np.ndarray) -> float:
         idx = self._snap_to_index(x)
 
-        # ak už je bod známy, vrátime cached hodnotu
         if idx in self.cache:
             return -self.cache[idx]
 
-        # tvrdý budget nad unikátnymi lokalitami
         if self.eval_count >= self.total_budget:
             raise BudgetReached("Dosiahnutý limit unikátnych evaluácií.")
 
@@ -134,6 +146,43 @@ class LAQNPyBADSObjective:
 
         return -y
 
+def _build_and_run_bads_silently(
+    objective,
+    x0,
+    lb,
+    ub,
+    plb,
+    pub,
+    options,
+):
+    """
+    Vytvorí aj spustí BADS bez zahlcujúcich výpisov do konzoly.
+    Umlčí stdout, stderr, warnings aj logging.
+    """
+    sink = io.StringIO()
+
+    previous_disable = logging.root.manager.disable
+
+    try:
+        logging.disable(logging.CRITICAL)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+
+            with redirect_stdout(sink), redirect_stderr(sink):
+                bads = BADS(
+                    objective,
+                    x0=x0,
+                    lower_bounds=lb,
+                    upper_bounds=ub,
+                    plausible_lower_bounds=plb,
+                    plausible_upper_bounds=pub,
+                    options=options,
+                )
+                return bads.optimize()
+
+    finally:
+        logging.disable(previous_disable)
 
 def run_pybads_on_problem(
     problem,
@@ -141,6 +190,8 @@ def run_pybads_on_problem(
     random_seed: int | None = None,
     display: str = "off",
 ) -> PyBADSLAQNResult:
+    start_total = time.perf_counter()
+
     if random_seed is not None:
         np.random.seed(random_seed)
 
@@ -148,7 +199,6 @@ def run_pybads_on_problem(
     xx0 = np.asarray(problem.xx, dtype=float)
     yy0 = np.asarray(problem.yy, dtype=float).reshape(-1)
 
-    # najlepší z počiatočných bodov použijeme ako x0
     best_init_idx = int(np.argmax(yy0))
     x0 = xx0[best_init_idx].astype(float)
 
@@ -164,25 +214,37 @@ def run_pybads_on_problem(
         include_initial_points=True,
     )
 
-    options = {
-        "display": display,
-        "max_fun_evals": 100000,  # skutočný stop riadime cez BudgetReached
-    }
+    restart_id = 0
+    max_restarts = 50
 
-    bads = BADS(
-        objective,
-        x0=x0,
-        lower_bounds=lb,
-        upper_bounds=ub,
-        plausible_lower_bounds=plb,
-        plausible_upper_bounds=pub,
-        options=options,
-    )
+    while objective.eval_count < total_budget and restart_id < max_restarts:
+        restart_id += 1
 
-    try:
-        _ = bads.optimize()
-    except BudgetReached:
-        pass
+        # display necháme kvôli konzistencii v options, ale výpisy aj tak potlačíme
+        local_display = display if restart_id == 1 else "off"
+
+        options = {
+            "display": local_display,
+            "max_fun_evals": 100000,
+        }
+
+        try:
+            _build_and_run_bads_silently(
+                objective=objective,
+                x0=x0,
+                lb=lb,
+                ub=ub,
+                plb=plb,
+                pub=pub,
+                options=options,
+            )
+        except BudgetReached:
+            break
+
+        try:
+            x0 = objective.sample_unseen_point()
+        except BudgetReached:
+            break
 
     if not objective.y_hist:
         raise RuntimeError("Nevznikla žiadna história evaluácií.")
@@ -196,6 +258,14 @@ def run_pybads_on_problem(
     deviation = float(optimum - best_y)
     success = bool(np.isclose(best_y, optimum))
 
+    final_best = objective.best_so_far[-1]
+    evals_to_f_best = next(
+        i + 1 for i, v in enumerate(objective.best_so_far)
+        if np.isclose(v, final_best)
+    )
+
+    total_time = time.perf_counter() - start_total
+
     return PyBADSLAQNResult(
         identifier=str(problem.identifier),
         best_x=best_x.tolist(),
@@ -204,6 +274,8 @@ def run_pybads_on_problem(
         x_hist=[np.asarray(x, dtype=float).tolist() for x in objective.x_hist],
         y_hist=[float(v) for v in objective.y_hist],
         eval_count=objective.eval_count,
+        evals_to_f_best=evals_to_f_best,
+        total_time=total_time,
         deviation_from_optimum=deviation,
         optimum=optimum,
         optimum_x=optimum_x.tolist(),

@@ -1,69 +1,51 @@
 from pathlib import Path
 import pickle
 import json
-import time
 import numpy as np
 
-from experiments.random_search_laqn import run_random_search_laqn
-
-def load_problem(path):
-    with open(path, "rb") as f:
-        return pickle.load(f)
+from optimizers.pybads_laqn import load_problem, run_pybads_on_problem
 
 def main():
     problem_dir = Path("data/laqn/2015/preprocessed")
     problem_files = sorted(problem_dir.glob("*.p"))
 
-    budget = 40
-    n_runs = 30
-    include_initial = True
+    budget = 1000
+    n_runs = 3
+    display = "off"
 
     all_problem_summaries = []
 
     for problem_file in problem_files:
         problem = load_problem(problem_file)
 
-        regrets = []
+        deviations = []
         best_values = []
         success_flags = []
         all_curves = []
-        times = []
         evals_to_best_list = []
+        times = []
 
         for run_idx in range(n_runs):
-            start = time.perf_counter()
-
-            result = run_random_search_laqn(
+            result = run_pybads_on_problem(
                 problem=problem,
-                budget=budget,
-                seed=run_idx,
-                include_initial=include_initial,
+                total_budget=budget,
+                random_seed=run_idx,
+                display=display,
             )
 
-            elapsed = time.perf_counter() - start
-
-            regret = float(problem.maximum - result.best_y)
-            success = bool(np.isclose(result.best_y, problem.maximum))
-
-            final_best = result.best_hist[-1]
-            evals_to_f_best = next(
-                i + 1 for i, v in enumerate(result.best_hist)
-                if np.isclose(v, final_best)
-            )
-
-            regrets.append(regret)
+            deviations.append(float(result.deviation_from_optimum))
             best_values.append(float(result.best_y))
-            success_flags.append(success)
-            all_curves.append(result.best_hist)
-            times.append(elapsed)
-            evals_to_best_list.append(evals_to_f_best)
+            success_flags.append(bool(result.success))
+            all_curves.append(result.best_so_far)
+            evals_to_best_list.append(int(result.evals_to_f_best))
+            times.append(float(result.total_time))
 
-        regrets = np.array(regrets, dtype=float)
-        best_values = np.array(best_values, dtype=float)
-        success_flags = np.array(success_flags, dtype=float)
-        all_curves = np.array(all_curves, dtype=float)
-        times = np.array(times, dtype=float)
-        evals_to_best_list = np.array(evals_to_best_list, dtype=float)
+        deviations = np.array(deviations)
+        best_values = np.array(best_values)
+        success_flags = np.array(success_flags)
+        all_curves = np.array(all_curves)
+        evals_to_best_list = np.array(evals_to_best_list)
+        times = np.array(times)
 
         summary = {
             "identifier": problem.identifier,
@@ -71,9 +53,9 @@ def main():
             "budget": budget,
             "n_runs": n_runs,
 
-            "mean_deviation": float(np.mean(regrets)),
-            "median_deviation": float(np.median(regrets)),
-            "std_deviation": float(np.std(regrets)),
+            "mean_deviation": float(np.mean(deviations)),
+            "median_deviation": float(np.median(deviations)),
+            "std_deviation": float(np.std(deviations)),
 
             "mean_best_y": float(np.mean(best_values)),
             "median_best_y": float(np.median(best_values)),
@@ -103,14 +85,18 @@ def main():
             f"mean_evals_to_best={summary['mean_evals_to_f_best']:.2f}"
         )
 
-    # ===== GLOBÁLNY SÚHRN =====
-    mean_deviations = np.array([p["mean_deviation"] for p in all_problem_summaries], dtype=float)
-    success_rates = np.array([p["success_rate"] for p in all_problem_summaries], dtype=float)
-    mean_best_values = np.array([p["mean_best_y"] for p in all_problem_summaries], dtype=float)
-    mean_evals_to_best = np.array([p["mean_evals_to_f_best"] for p in all_problem_summaries], dtype=float)
-    mean_times = np.array([p["mean_total_time"] for p in all_problem_summaries], dtype=float)
+    # ===== GLOBAL SUMMARY =====
+    mean_deviations = np.array([p["mean_deviation"] for p in all_problem_summaries])
+    success_rates = np.array([p["success_rate"] for p in all_problem_summaries])
+    mean_best_values = np.array([p["mean_best_y"] for p in all_problem_summaries])
+    mean_evals_to_best = np.array([p["mean_evals_to_f_best"] for p in all_problem_summaries])
+    mean_times = np.array([p["mean_total_time"] for p in all_problem_summaries])
 
-    all_problem_mean_curves = np.array([p["mean_curve"] for p in all_problem_summaries], dtype=float)
+    min_curve_len = min(len(p["mean_curve"]) for p in all_problem_summaries)
+    all_problem_mean_curves = np.array(
+        [p["mean_curve"][:min_curve_len] for p in all_problem_summaries],
+        dtype=float
+    )
     global_mean_curve = np.mean(all_problem_mean_curves, axis=0).tolist()
 
     global_summary = {
@@ -123,10 +109,10 @@ def main():
         "mean_evals_to_f_best": float(np.mean(mean_evals_to_best)),
         "mean_total_time": float(np.mean(mean_times)),
         "mean_best_so_far_curve": global_mean_curve,
-        "min_curve_length": len(global_mean_curve),
+        "min_curve_length": int(min_curve_len),
     }
 
-    print("\n===== GLOBÁLNY SÚHRN =====")
+    print("\n===== GLOBAL SUMMARY =====")
     print(f"Problems: {global_summary['n_problems']}")
     print(f"Mean deviation: {global_summary['mean_deviation']:.6f}")
     print(f"Median deviation: {global_summary['median_deviation']:.6f}")
@@ -140,13 +126,13 @@ def main():
             "problem_dir": str(problem_dir),
             "budget": budget,
             "n_runs": n_runs,
-            "include_initial": include_initial,
+            "display": display,
         },
         "summary": global_summary,
         "results": all_problem_summaries,
     }
 
-    out_path = Path("results/random_search_2015_budget40.json")
+    out_path = Path("results/pybads_2015_multirun.json")
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
 
