@@ -1,21 +1,23 @@
 from __future__ import annotations
-import logging
+
 import io
-import os
+import logging
 import pickle
 import time
 import warnings
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from scipy.spatial import cKDTree
 from pybads import BADS
+from scipy.spatial import cKDTree
+
 
 class BudgetReached(Exception):
     pass
+
 
 @dataclass
 class PyBADSLAQNResult:
@@ -25,7 +27,11 @@ class PyBADSLAQNResult:
     best_so_far: list[float]
     x_hist: list[list[float]]
     y_hist: list[float]
-    eval_count: int
+
+    budget: int
+    call_count: int
+    unique_eval_count: int
+
     evals_to_f_best: int
     total_time: float
     deviation_from_optimum: float
@@ -36,10 +42,12 @@ class PyBADSLAQNResult:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+
 def load_problem(problem_path: str | Path):
     problem_path = Path(problem_path)
     with problem_path.open("rb") as f:
         return pickle.load(f)
+
 
 class LAQNPyBADSObjective:
     """
@@ -47,6 +55,10 @@ class LAQNPyBADSObjective:
     My ho priradíme k najbližšiemu bodu z problem.domain.
     Hodnotu zoberieme z problem.labels.
     Keďže pyBADS minimalizuje, vraciame -y.
+
+    Dôležité:
+    - total_budget = počet VOLANÍ objective funkcie
+    - unique_eval_count = počet unikátnych lokalít navštívených počas behov
     """
 
     def __init__(
@@ -73,38 +85,27 @@ class LAQNPyBADSObjective:
         # cache: index bodu v domain -> objective value
         self.cache: dict[int, float] = {}
 
+        # história podľa VOLANÍ algoritmu
         self.x_hist: list[np.ndarray] = []
         self.y_hist: list[float] = []
         self.best_so_far: list[float] = []
 
-        if include_initial_points:
-            self._load_initial_points()
+        self.call_count = 0
 
-    def _load_initial_points(self) -> None:
-        xx0 = np.asarray(self.problem.xx, dtype=float)
-        yy0 = np.asarray(self.problem.yy, dtype=float).reshape(-1)
+        self.initial_x = (
+            np.asarray(problem.xx, dtype=float)
+            if include_initial_points else np.empty((0, 2))
+        )
+        self.initial_y = (
+            np.asarray(problem.yy, dtype=float).reshape(-1)
+            if include_initial_points else np.empty((0,))
+        )
 
-        if len(xx0) != len(yy0):
+        if len(self.initial_x) != len(self.initial_y):
             raise ValueError("Počet xx a yy sa nezhoduje")
 
-        for x0, y0 in zip(xx0, yy0):
-            idx = self._snap_to_index(x0)
-
-            if idx in self.cache:
-                continue
-
-            y0 = float(y0)
-            self.cache[idx] = y0
-            self.x_hist.append(self.domain[idx].copy())
-            self.y_hist.append(y0)
-
-            if not self.best_so_far:
-                self.best_so_far.append(y0)
-            else:
-                self.best_so_far.append(max(self.best_so_far[-1], y0))
-
     @property
-    def eval_count(self) -> int:
+    def unique_eval_count(self) -> int:
         return len(self.cache)
 
     def _snap_to_index(self, x: np.ndarray) -> int:
@@ -112,29 +113,37 @@ class LAQNPyBADSObjective:
         _, idx = self.tree.query(x, k=1)
         return int(idx)
 
-    def sample_unseen_point(self) -> np.ndarray:
+    def sample_restart_point(self) -> np.ndarray:
         """
-        Náhodne vyberie ešte nevyhodnotený bod z domain.
-        Ak už sú všetky body vyhodnotené, vyhodí chybu.
+        Vyberie bod z domény ako nový štart pre ďalší restart.
+        Nemusí byť nevyhnutne nevidený, pretože budget meriame počtom volaní.
         """
-        unseen_indices = [i for i in range(len(self.domain)) if i not in self.cache]
-        if not unseen_indices:
-            raise BudgetReached("Všetky body z domain už boli vyhodnotené.")
-
-        idx = int(np.random.choice(unseen_indices))
+        idx = int(np.random.randint(0, len(self.domain)))
         return self.domain[idx].copy()
 
+    def suggest_initial_x0(self) -> np.ndarray:
+        """
+        Ako štartovací bod vezmeme najlepší z problem.xx / problem.yy.
+        """
+        if len(self.initial_x) == 0:
+            idx = int(np.random.randint(0, len(self.domain)))
+            return self.domain[idx].copy()
+
+        best_init_idx = int(np.argmax(self.initial_y))
+        return self.initial_x[best_init_idx].astype(float)
+
     def __call__(self, x: np.ndarray) -> float:
+        if self.call_count >= self.total_budget:
+            raise BudgetReached("Dosiahnutý limit volaní algoritmu.")
+
+        self.call_count += 1
+
         idx = self._snap_to_index(x)
 
-        if idx in self.cache:
-            return -self.cache[idx]
+        if idx not in self.cache:
+            self.cache[idx] = float(self.labels[idx])
 
-        if self.eval_count >= self.total_budget:
-            raise BudgetReached("Dosiahnutý limit unikátnych evaluácií.")
-
-        y = float(self.labels[idx])
-        self.cache[idx] = y
+        y = float(self.cache[idx])
 
         self.x_hist.append(self.domain[idx].copy())
         self.y_hist.append(y)
@@ -146,6 +155,7 @@ class LAQNPyBADSObjective:
 
         return -y
 
+
 def _build_and_run_bads_silently(
     objective,
     x0,
@@ -155,12 +165,7 @@ def _build_and_run_bads_silently(
     pub,
     options,
 ):
-    """
-    Vytvorí aj spustí BADS bez zahlcujúcich výpisov do konzoly.
-    Umlčí stdout, stderr, warnings aj logging.
-    """
     sink = io.StringIO()
-
     previous_disable = logging.root.manager.disable
 
     try:
@@ -184,6 +189,7 @@ def _build_and_run_bads_silently(
     finally:
         logging.disable(previous_disable)
 
+
 def run_pybads_on_problem(
     problem,
     total_budget: int = 1000,
@@ -196,11 +202,6 @@ def run_pybads_on_problem(
         np.random.seed(random_seed)
 
     domain = np.asarray(problem.domain, dtype=float)
-    xx0 = np.asarray(problem.xx, dtype=float)
-    yy0 = np.asarray(problem.yy, dtype=float).reshape(-1)
-
-    best_init_idx = int(np.argmax(yy0))
-    x0 = xx0[best_init_idx].astype(float)
 
     lb = domain.min(axis=0)
     ub = domain.max(axis=0)
@@ -214,13 +215,14 @@ def run_pybads_on_problem(
         include_initial_points=True,
     )
 
-    restart_id = 0
-    max_restarts = 50
+    x0 = objective.suggest_initial_x0()
 
-    while objective.eval_count < total_budget and restart_id < max_restarts:
+    restart_id = 0
+    max_restarts = 200
+
+    while objective.call_count < total_budget and restart_id < max_restarts:
         restart_id += 1
 
-        # display necháme kvôli konzistencii v options, ale výpisy aj tak potlačíme
         local_display = display if restart_id == 1 else "off"
 
         options = {
@@ -241,10 +243,10 @@ def run_pybads_on_problem(
         except BudgetReached:
             break
 
-        try:
-            x0 = objective.sample_unseen_point()
-        except BudgetReached:
+        if objective.call_count >= total_budget:
             break
+
+        x0 = objective.sample_restart_point()
 
     if not objective.y_hist:
         raise RuntimeError("Nevznikla žiadna história evaluácií.")
@@ -273,9 +275,11 @@ def run_pybads_on_problem(
         best_so_far=[float(v) for v in objective.best_so_far],
         x_hist=[np.asarray(x, dtype=float).tolist() for x in objective.x_hist],
         y_hist=[float(v) for v in objective.y_hist],
-        eval_count=objective.eval_count,
-        evals_to_f_best=evals_to_f_best,
-        total_time=total_time,
+        budget=int(total_budget),
+        call_count=int(objective.call_count),
+        unique_eval_count=int(objective.unique_eval_count),
+        evals_to_f_best=int(evals_to_f_best),
+        total_time=float(total_time),
         deviation_from_optimum=deviation,
         optimum=optimum,
         optimum_x=optimum_x.tolist(),
