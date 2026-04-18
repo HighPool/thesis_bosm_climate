@@ -1,111 +1,183 @@
-from dataclasses import dataclass
-import numpy as np
-import pickle
+from __future__ import annotations
+
+from dataclasses import dataclass, asdict
 from pathlib import Path
+from typing import Any
+import pickle
+
+import numpy as np
+from scipy.spatial import cKDTree
 
 
 @dataclass
 class RandomSearchLAQNResult:
-    chosen_indices: np.ndarray
-    X_hist: np.ndarray
-    y_hist: np.ndarray
-    best_hist: np.ndarray
-    best_x: np.ndarray
+    algorithm_name: str
+    problem_id: str
+    dimension: int
+    run_id: int | None
+
+    chosen_indices: list[int]
+    X_hist: list[list[float]]
+    y_hist: list[float]
+    best_so_far: list[float]
+    best_x: list[float]
     best_y: float
-    n_evals: int
+
+    budget: int
+    call_count: int
+    unique_eval_count: int
+
+    evals_to_f_best: int
+    total_time: float
+    deviation_from_optimum: float
+    optimum: float
+    optimum_x: list[float]
+    success: bool
     seed: int
-    identifier: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
-def load_problem(path):
-    with open(path, "rb") as f:
+def load_problem(path: str | Path):
+    path = Path(path)
+    with path.open("rb") as f:
         return pickle.load(f)
 
 
-def run_random_search_laqn(problem, budget=20, seed=0, include_initial=True):
-    rng = np.random.default_rng(seed)
-
+def _snap_indices_for_initial_points(problem) -> list[int]:
     domain = np.asarray(problem.domain, dtype=float)
-    labels = np.asarray(problem.labels, dtype=float)
+    xx = np.asarray(problem.xx, dtype=float)
 
-    n_points = domain.shape[0]
+    tree = cKDTree(domain)
+    indices = []
+    used = set()
+
+    for x0 in xx:
+        _, idx = tree.query(x0, k=1)
+        idx = int(idx)
+        if idx not in used:
+            used.add(idx)
+            indices.append(idx)
+
+    return indices
+
+
+def run_random_search_laqn(
+    problem,
+    budget: int = 500,
+    seed: int = 0,
+    include_initial: bool = True,
+    run_id: int | None = None,
+) -> RandomSearchLAQNResult:
+    import time
+
+    start_total = time.perf_counter()
 
     if budget <= 0:
         raise ValueError("budget musí byť kladný")
 
-    # zoznam už pozorovaných indexov
-    used = set()
+    rng = np.random.default_rng(seed)
 
-    X_hist = []
-    y_hist = []
+    domain = np.asarray(problem.domain, dtype=float)
+    labels = np.asarray(problem.labels, dtype=float).reshape(-1)
 
-    # ak chceš zachovať benchmarkový štart z 5 bodov
+    if domain.ndim != 2:
+        raise ValueError(f"problem.domain musí byť 2D pole, shape={domain.shape}")
+    if len(domain) != len(labels):
+        raise ValueError("Počet bodov v domain a labels sa nezhoduje")
+
+    n_points = domain.shape[0]
+
+    initial_indices: list[int] = []
     if include_initial:
-        for x0, y0 in zip(problem.xx, problem.yy):
-            # nájdi index x0 v doméne
-            matches = np.where(np.all(np.isclose(domain, x0), axis=1))[0]
-            if len(matches) == 0:
-                raise RuntimeError("Počiatočný bod z .xx sa nenašiel v .domain")
-            idx = int(matches[0])
-            if idx not in used:
-                used.add(idx)
-                X_hist.append(domain[idx])
-                y_hist.append(labels[idx])
+        initial_indices = _snap_indices_for_initial_points(problem)
 
-    remaining_budget = budget - len(X_hist)
-    if remaining_budget < 0:
-        raise ValueError("budget je menší než počet počiatočných bodov")
+    x_hist: list[list[float]] = []
+    y_hist: list[float] = []
+    best_so_far: list[float] = []
+    chosen_indices: list[int] = []
 
-    available = np.array([i for i in range(n_points) if i not in used], dtype=int)
+    visited_unique: set[int] = set()
 
-    chosen_indices = []
-
-    for _ in range(remaining_budget):
-        if len(available) == 0:
-            break
-
-        pick_pos = rng.integers(0, len(available))
-        idx = int(available[pick_pos])
+    for call_idx in range(budget):
+        if include_initial and call_idx < len(initial_indices):
+            idx = initial_indices[call_idx]
+        else:
+            idx = int(rng.integers(0, n_points))
 
         chosen_indices.append(idx)
-        used.add(idx)
+        visited_unique.add(idx)
 
-        X_hist.append(domain[idx])
-        y_hist.append(labels[idx])
+        x = domain[idx].astype(float).tolist()
+        y = float(labels[idx])
 
-        available = np.delete(available, pick_pos)
+        x_hist.append(x)
+        y_hist.append(y)
 
-    X_hist = np.asarray(X_hist, dtype=float)
-    y_hist = np.asarray(y_hist, dtype=float)
+        if not best_so_far:
+            best_so_far.append(y)
+        else:
+            best_so_far.append(max(best_so_far[-1], y))
 
-    # LAQN je maximalizačná úloha
-    best_hist = np.maximum.accumulate(y_hist)
     best_idx = int(np.argmax(y_hist))
-    best_x = X_hist[best_idx]
+    best_x = x_hist[best_idx]
     best_y = float(y_hist[best_idx])
 
+    optimum = float(problem.maximum)
+    optimum_x = np.asarray(problem.maximiser, dtype=float).tolist()
+    deviation = float(optimum - best_y)
+    success = bool(np.isclose(best_y, optimum))
+
+    final_best = best_so_far[-1]
+    evals_to_f_best = next(
+        i + 1 for i, v in enumerate(best_so_far)
+        if np.isclose(v, final_best)
+    )
+
+    total_time = time.perf_counter() - start_total
+
     return RandomSearchLAQNResult(
-        chosen_indices=np.asarray(chosen_indices, dtype=int),
-        X_hist=X_hist,
+        algorithm_name="RandomSearch",
+        problem_id=str(problem.identifier),
+        dimension=int(domain.shape[1]),
+        run_id=run_id,
+        chosen_indices=chosen_indices,
+        X_hist=x_hist,
         y_hist=y_hist,
-        best_hist=best_hist,
+        best_so_far=best_so_far,
         best_x=best_x,
         best_y=best_y,
-        n_evals=len(y_hist),
-        seed=seed,
-        identifier=problem.identifier,
+        budget=int(budget),
+        call_count=int(budget),
+        unique_eval_count=int(len(visited_unique)),
+        evals_to_f_best=int(evals_to_f_best),
+        total_time=float(total_time),
+        deviation_from_optimum=deviation,
+        optimum=optimum,
+        optimum_x=optimum_x,
+        success=success,
+        seed=int(seed),
     )
 
 
 if __name__ == "__main__":
-    problem_file = next(Path("data_sorted/2015_problems/preprocessed").glob("*.p"))
+    problem_file = next(Path("data/laqn/2015/preprocessed").glob("*.p"))
     problem = load_problem(problem_file)
 
-    result = run_random_search_laqn(problem, budget=20, seed=42, include_initial=True)
+    result = run_random_search_laqn(
+        problem=problem,
+        budget=500,
+        seed=0,
+        include_initial=True,
+        run_id=1,
+    )
 
-    print("Problem:", result.identifier)
-    print("n_evals:", result.n_evals)
+    print("algorithm_name:", result.algorithm_name)
+    print("problem_id:", result.problem_id)
     print("best_y:", result.best_y)
-    print("best_x:", result.best_x)
-    print("true maximum:", problem.maximum)
-    print("true maximiser:", problem.maximiser)
+    print("optimum:", result.optimum)
+    print("deviation:", result.deviation_from_optimum)
+    print("call_count:", result.call_count)
+    print("unique_eval_count:", result.unique_eval_count)
+    print("success:", result.success)

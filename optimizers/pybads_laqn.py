@@ -21,7 +21,11 @@ class BudgetReached(Exception):
 
 @dataclass
 class PyBADSLAQNResult:
-    identifier: str
+    algorithm_name: str
+    problem_id: str
+    dimension: int
+    run_id: int | None
+
     best_x: list[float]
     best_y: float
     best_so_far: list[float]
@@ -52,8 +56,8 @@ def load_problem(problem_path: str | Path):
 class LAQNPyBADSObjective:
     """
     pyBADS navrhuje spojitý 2D bod.
-    My ho priradíme k najbližšiemu bodu z problem.domain.
-    Hodnotu zoberieme z problem.labels.
+    Ten sa premietne na najbližší bod z problem.domain.
+    Hodnota sa berie z problem.labels.
     Keďže pyBADS minimalizuje, vraciame -y.
 
     Dôležité:
@@ -64,7 +68,7 @@ class LAQNPyBADSObjective:
     def __init__(
         self,
         problem,
-        total_budget: int = 1000,
+        total_budget: int = 500,
         include_initial_points: bool = True,
     ):
         self.problem = problem
@@ -82,10 +86,8 @@ class LAQNPyBADSObjective:
 
         self.tree = cKDTree(self.domain)
 
-        # cache: index bodu v domain -> objective value
         self.cache: dict[int, float] = {}
 
-        # história podľa VOLANÍ algoritmu
         self.x_hist: list[np.ndarray] = []
         self.y_hist: list[float] = []
         self.best_so_far: list[float] = []
@@ -114,17 +116,10 @@ class LAQNPyBADSObjective:
         return int(idx)
 
     def sample_restart_point(self) -> np.ndarray:
-        """
-        Vyberie bod z domény ako nový štart pre ďalší restart.
-        Nemusí byť nevyhnutne nevidený, pretože budget meriame počtom volaní.
-        """
         idx = int(np.random.randint(0, len(self.domain)))
         return self.domain[idx].copy()
 
     def suggest_initial_x0(self) -> np.ndarray:
-        """
-        Ako štartovací bod vezmeme najlepší z problem.xx / problem.yy.
-        """
         if len(self.initial_x) == 0:
             idx = int(np.random.randint(0, len(self.domain)))
             return self.domain[idx].copy()
@@ -192,8 +187,9 @@ def _build_and_run_bads_silently(
 
 def run_pybads_on_problem(
     problem,
-    total_budget: int = 1000,
+    total_budget: int = 500,
     random_seed: int | None = None,
+    run_id: int | None = None,
     display: str = "off",
 ) -> PyBADSLAQNResult:
     start_total = time.perf_counter()
@@ -269,7 +265,10 @@ def run_pybads_on_problem(
     total_time = time.perf_counter() - start_total
 
     return PyBADSLAQNResult(
-        identifier=str(problem.identifier),
+        algorithm_name="PyBADS",
+        problem_id=str(problem.identifier),
+        dimension=int(domain.shape[1]),
+        run_id=run_id,
         best_x=best_x.tolist(),
         best_y=best_y,
         best_so_far=[float(v) for v in objective.best_so_far],

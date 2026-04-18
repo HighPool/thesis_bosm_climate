@@ -6,12 +6,14 @@ problem = load_problem(problem_path)
 
 result = run_turbo_on_problem(
     problem,
-    total_budget=1000,
+    total_budget=500,
     random_seed=0,
+    run_id=1,
     verbose=False,
 )
 
-print("identifier:", result.identifier)
+print("algorithm_name:", result.algorithm_name)
+print("problem_id:", result.problem_id)
 print("best_y:", result.best_y)
 print("optimum:", result.optimum)
 print("deviation:", result.deviation_from_optimum)

@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import pickle
 import time
+import numpy as np
+
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
-
-import numpy as np
 from scipy.spatial import cKDTree
 from turbo import Turbo1
 
-
 @dataclass
 class TurboLAQNResult:
-    identifier: str
+    algorithm_name: str
+    problem_id: str
+    dimension: int
+    run_id: int | None
+
     best_x: list[float]
     best_y: float
     best_so_far: list[float]
@@ -165,8 +168,9 @@ class LAQNTurboObjective:
 
 def run_turbo_on_problem(
     problem,
-    total_budget: int = 1000,
+    total_budget: int = 500,
     random_seed: int | None = None,
+    run_id: int | None = None,
     use_ard: bool = True,
     n_training_steps: int = 50,
     verbose: bool = False,
@@ -251,7 +255,10 @@ def run_turbo_on_problem(
     total_time = time.perf_counter() - start_total
 
     return TurboLAQNResult(
-        identifier=str(problem.identifier),
+        algorithm_name="TuRBO",
+        problem_id=str(problem.identifier),
+        dimension=int(domain.shape[1]),
+        run_id=run_id,
         best_x=best_x.tolist(),
         best_y=best_y,
         best_so_far=[float(v) for v in objective.best_so_far],
