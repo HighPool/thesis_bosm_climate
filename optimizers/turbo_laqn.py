@@ -1,9 +1,18 @@
 from __future__ import annotations
+"""
+Implementácia metódy TuRBO pre úlohy LAQN
+
+Skript zabezpečuje:
+- načítanie jednej problémovej inštancie LAQN
+- premietnutie spojitého návrhu algoritmu TuRBO na diskrétnu množinu lokalít
+- sledovanie histórie behového spustenia
+- výpočet metrík jedného behového experimentu
+- a voliteľné uloženie výsledku do JSON
+"""
 
 import pickle
 import time
 import numpy as np
-
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -12,6 +21,16 @@ from turbo import Turbo1
 
 @dataclass
 class TurboLAQNResult:
+    """
+    Výsledok jedného spustenia implementácie TuRBO algoritmu na jednej LAQN úlohe
+
+    Ukladajú sa:
+    - id algoritmu, problému a spustenie behu
+    - priebeh evaluácií a best-so-far krivka
+    - finálne najlepšie riešenie
+    - a základné metriky použité v ďalšom vyhodnotení
+    """
+
     algorithm_name: str
     problem_id: str
     dimension: int
@@ -34,10 +53,11 @@ class TurboLAQNResult:
     optimum_x: list[float]
     success: bool
 
+    # Formátovanie python objektu na JSON dáta
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-
+# Načítanie jednej inštancie problému LAQN z .p súboru
 def load_problem(problem_path: str | Path):
     problem_path = Path(problem_path)
     with problem_path.open("rb") as f:
@@ -46,14 +66,17 @@ def load_problem(problem_path: str | Path):
 
 class LAQNTurboObjective:
     """
-    TuRBO navrhuje spojitý 2D bod.
-    Ten sa premietne na najbližší bod z problem.domain.
-    Hodnota sa berie z problem.labels.
-    Keďže TuRBO minimalizuje, vraciame -y.
+    Wrapper - Most medzi spojitým priestorom TuRBO a diskrétnou doménou úlohy LAQN
 
-    Dôležité:
-    - total_budget = počet VOLANÍ objective funkcie
-    - unique_eval_count = počet unikátnych lokalít, ktoré boli počas behov navštívené
+    TuRBO pracuje v spojitom priestore a navrhuje 2D bod 
+    Tento bod sa pri každom volaní premietne na najbližšiu platnú lokalitu z problem.domain
+    Hodnota cieľovej funkcie sa zoberie z problem.labels
+    TuRBO rieši minimalizačné úlohy, zatiaľ čo 
+    LAQN je formulovaná ako maximalizačná úloha
+    vracia sa hodnota -y
+
+    total_budget      počet volaní algoritmu,
+    unique_eval_count počet unikátne navštívených lokalít
     """
 
     def __init__(
@@ -68,6 +91,7 @@ class LAQNTurboObjective:
         self.domain = np.asarray(problem.domain, dtype=float)
         self.labels = np.asarray(problem.labels, dtype=float).reshape(-1)
 
+        # Kontrola štruktúry vstupnej domény a hodnôt
         if self.domain.ndim != 2:
             raise ValueError(f"problem.domain musí byť 2D pole, shape={self.domain.shape}")
         if self.domain.shape[1] != 2:
@@ -75,18 +99,20 @@ class LAQNTurboObjective:
         if len(self.domain) != len(self.labels):
             raise ValueError("Počet bodov v domain a labels sa nezhoduje")
 
+        # KD-strom slúži na rýchle priradenie spojitého bodu k najbližšej lokalite
         self.tree = cKDTree(self.domain)
 
-        # cache pre už raz navštívené body domény
+        # Cache uchováva hodnoty navštívených bodov domény
         self.cache: dict[int, float] = {}
 
-        # história podľa VOLANÍ algoritmu
+        # História sa vedie po jednotlivých volaniach algoritmu
         self.x_hist: list[np.ndarray] = []
         self.y_hist: list[float] = []
         self.best_so_far: list[float] = []
 
         self.call_count = 0
 
+        # Počiatočné body sa môžu prevziať zo samotnej inštancie problému
         self.initial_x = (
             np.asarray(problem.xx, dtype=float)
             if include_initial_points else np.empty((0, 2))
@@ -100,9 +126,11 @@ class LAQNTurboObjective:
             raise ValueError("Počet xx a yy sa nezhoduje")
 
     @property
+    # Počet unikátne navštívených lokalít počas spustenia behov
     def unique_eval_count(self) -> int:
         return len(self.cache)
 
+    # Premietne spojitý 2D bod na index najbližšieho bodu z diskrétnej domény
     def _snap_to_index(self, x: np.ndarray) -> int:
         x = np.asarray(x, dtype=float).reshape(-1)
         _, idx = self.tree.query(x, k=1)
@@ -110,9 +138,9 @@ class LAQNTurboObjective:
 
     def suggest_initial_points(self, n_init: int) -> np.ndarray:
         """
-        Počiatočné body pre TuRBO.
-        Prednostne použije problem.xx, zvyšok doplní náhodne z domény.
-        TuRBO si ich potom samo vyhodnotí cez __call__.
+        Navrhne počiatočné body pre TuRBO.
+        Prednostne sa použijú počiatočné body z problem.xx
+        Ak ich je menej než požaduje TuRBO, zvyšok sa doplní náhodne z diskrétnej domény.
         """
         candidates: list[np.ndarray] = []
         used_init_indices: set[int] = set()
@@ -138,9 +166,11 @@ class LAQNTurboObjective:
         return np.asarray(candidates, dtype=float)
 
     def __call__(self, x: np.ndarray) -> float:
+        """
+        Vyhodnotenie jedného bodu navrhnutého algoritmom
+        Po dosiahnutí rozpočtu sa ďalšie volania už nezapočítavajú
+        """
         if self.call_count >= self.total_budget:
-            # TuRBO si môže pýtať ďalšie hodnoty; po budgete vraciame poslednú známu hodnotu
-            # ale call_count už ďalej nenavyšujeme
             if self.y_hist:
                 return -float(self.y_hist[-1])
             return 0.0
@@ -149,12 +179,13 @@ class LAQNTurboObjective:
 
         idx = self._snap_to_index(x)
 
-        # ak bod ešte nebol videný, uložíme ho do cache
+        # Nový bod sa vloží do cache len pri prvej návšteve.
         if idx not in self.cache:
             self.cache[idx] = float(self.labels[idx])
 
         y = float(self.cache[idx])
 
+        # Ukladanie histórie po každom volaní algoritmu.
         self.x_hist.append(self.domain[idx].copy())
         self.y_hist.append(y)
 
@@ -179,6 +210,16 @@ def run_turbo_on_problem(
     device: str = "cpu",
     dtype: str = "float64",
 ) -> TurboLAQNResult:
+    """
+    Spustí jeden beh metódy TuRBO na jednej LAQN úlohe.
+
+    Funkcia:
+    - pripraví objective wrapper
+    - nastaví hranice priestoru
+    - inicializuje TuRBO
+    - spustí optimalizáciu
+    - vypočíta metriky jedného experimentu
+    """
     start_total = time.perf_counter()
 
     if random_seed is not None:
@@ -197,11 +238,13 @@ def run_turbo_on_problem(
         include_initial_points=True,
     )
 
+    # Počet inicializačných bodov
     if n_init is None:
         n_init = max(4, 2 * domain.shape[1])
 
     X_init = objective.suggest_initial_points(n_init=n_init)
 
+    # Kompatibilita medzi verziami TuRBO algoritmu
     try:
         turbo = Turbo1(
             f=objective,
@@ -237,6 +280,7 @@ def run_turbo_on_problem(
     if not objective.y_hist:
         raise RuntimeError("Nevznikla žiadna história evaluácií.")
 
+    # Najlepšie riešenie sa určuje podľa maximálnej hodnoty enviromentálneho senzora
     best_idx = int(np.argmax(objective.y_hist))
     best_x = np.asarray(objective.x_hist[best_idx], dtype=float)
     best_y = float(objective.y_hist[best_idx])
@@ -246,6 +290,7 @@ def run_turbo_on_problem(
     deviation = float(optimum - best_y)
     success = bool(np.isclose(best_y, optimum))
 
+    # evals_to_f_best udáva, po koľkých TuRBO volaniach bolo prvýkrát dosiahnuté finálne maximum
     final_best = objective.best_so_far[-1]
     evals_to_f_best = next(
         i + 1 for i, v in enumerate(objective.best_so_far)
@@ -275,7 +320,7 @@ def run_turbo_on_problem(
         success=success,
     )
 
-
+# Uloží výsledok jedného behu experimentu do JSON súboru
 def save_result_json(result: TurboLAQNResult, out_path: str | Path) -> None:
     import json
 

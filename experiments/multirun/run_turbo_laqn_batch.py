@@ -6,10 +6,27 @@ import numpy as np
 from pathlib import Path
 from optimizers.turbo_laqn import load_problem, run_turbo_on_problem
 
+"""
+Multirun experiment metódy TuRBO na úlohách LAQN
+- načíta všetky problémové inštancie z určeného priečinka
+- na každej úlohe vykoná viac behov algoritmu
+- agreguje metriky cez behy pre každú úlohu zvlášť
+- vytvorí globálny súhrn cez všetky úlohy
+- uloží výsledky do summary JSON
+- uloží detailné run-level JSON súbory po problémoch
+- a vytvorí CSV výstup pre IOHanalyzer
+
+Toto je experimentálny skript 
+"""
+
 def main():
+    # Meranie celkového času batch experimentu
     batch_start = time.perf_counter()
+
+    # Cesta pre vstupné dáta
     problem_dir = Path("data/laqn/2015/preprocessed")
 
+    # Výstupná štruktúra pre výsledky TuRBO algoritmu
     base_out_dir = Path("results/final/turbo")
     per_problem_dir = base_out_dir / "per_problem"
     base_out_dir.mkdir(parents=True, exist_ok=True)
@@ -18,16 +35,19 @@ def main():
     summary_path = base_out_dir / "turbo_summary_2015_budget500_runs20.json"
     csv_path = base_out_dir / "turbo_ioh_2015_budget500_runs20.csv"
 
+    # Načítanie všetkých inštancií problémov
     problem_files = sorted(problem_dir.glob("*.p"))
     if not problem_files:
         raise FileNotFoundError(f"V {problem_dir} sa nenašli žiadne .p súbory.")
 
+    # Experimentálne nastavenie
     budget = 500
     n_runs = 20
     algorithm_name = "TuRBO"
 
     all_problem_summaries = []
 
+    # CSV súbor sa zapisuje riadok po riadku priebežne počas experimentu
     with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
         writer = csv.DictWriter(
             csv_file,
@@ -43,11 +63,13 @@ def main():
         )
         writer.writeheader()
 
+        # Hlavný loop pre všetky inštancie problémov
         for problem_idx, problem_file in enumerate(problem_files, start=1):
             print(f"\n[{problem_idx}/{len(problem_files)}] {problem_file.name}")
 
             problem = load_problem(problem_file)
 
+            # Polia na agregáciu metrík pre všetky behy jednej úlohy
             deviations = []
             best_values = []
             success_flags = []
@@ -57,8 +79,10 @@ def main():
             unique_eval_counts = []
             call_counts = []
 
+            # Detail výsledkov konkrétnej úlohy
             run_payloads = []
 
+            # Loop cez viacnásobné behové opakovania
             for run_idx in range(n_runs):
                 print(f"  run {run_idx + 1}/{n_runs}", flush=True)
 
@@ -70,6 +94,7 @@ def main():
                     verbose=False,
                 )
 
+                # Uloženie metrík jedného behu
                 deviations.append(float(result.deviation_from_optimum))
                 best_values.append(float(result.best_y))
                 success_flags.append(bool(result.success))
@@ -81,7 +106,10 @@ def main():
 
                 run_payloads.append(result.to_dict())
 
-                for eval_idx, (raw_y, best_y) in enumerate(zip(result.y_hist, result.best_so_far), start=1):
+                # Export priebehu každého spustenia behu do CSV pre IOHanalyzer
+                for eval_idx, (raw_y, best_y) in enumerate(
+                    zip(result.y_hist, result.best_so_far), start=1
+                ):
                     writer.writerow(
                         {
                             "algorithm_id": result.algorithm_name,
@@ -94,6 +122,7 @@ def main():
                         }
                     )
 
+            # Prevod na numpy polia - agregácii metrík
             deviations = np.array(deviations, dtype=float)
             best_values = np.array(best_values, dtype=float)
             success_flags = np.array(success_flags, dtype=float)
@@ -102,9 +131,11 @@ def main():
             unique_eval_counts = np.array(unique_eval_counts, dtype=float)
             call_counts = np.array(call_counts, dtype=float)
 
+            # Krivky môžu byť teoreticky rôzne dlhé, preto sa skrátia na spoločné minimum
             min_len = min(len(c) for c in all_curves)
             curves = np.array([np.array(c[:min_len], dtype=float) for c in all_curves], dtype=float)
 
+            # Súhrn metrík pre jednu inštanciu problému
             summary = {
                 "identifier": problem.identifier,
                 "algorithm_name": algorithm_name,
@@ -141,6 +172,7 @@ def main():
 
             all_problem_summaries.append(summary)
 
+            # Detailné výsledky tejto úlohy sa uložia samostatne
             per_problem_payload = {
                 "algorithm_name": algorithm_name,
                 "problem_id": str(problem.identifier),
@@ -156,6 +188,7 @@ def main():
             with per_problem_path.open("w", encoding="utf-8") as f:
                 json.dump(per_problem_payload, f, indent=2, ensure_ascii=False)
 
+            # Priebežný výpis do terminálu
             print(
                 f"{problem.identifier} | "
                 f"mean_deviation={summary['mean_deviation']:.4f} | "
@@ -163,6 +196,7 @@ def main():
                 f"mean_unique={summary['mean_unique_eval_count']:.2f}"
             )
 
+    # Globálna agregácia cez všetky problémové inštancie
     mean_deviations = np.array([p["mean_deviation"] for p in all_problem_summaries], dtype=float)
     success_rates = np.array([p["success_rate"] for p in all_problem_summaries], dtype=float)
     mean_best_values = np.array([p["mean_best_y"] for p in all_problem_summaries], dtype=float)
@@ -178,8 +212,10 @@ def main():
     )
     global_mean_curve = np.mean(all_problem_mean_curves, axis=0).tolist()
 
+    # Celkový čas batch experimentu
     batch_total_time = time.perf_counter() - batch_start
 
+    # Globálny súhrn cez všetky úlohy
     global_summary = {
         "n_problems": len(all_problem_summaries),
         "mean_deviation": float(np.mean(mean_deviations)),
@@ -217,7 +253,6 @@ def main():
     print(f"Saved IOHanalyzer CSV to: {csv_path}")
     print(f"Batch total time: {batch_total_time:.4f} s")
     print(f"Batch total time: {batch_total_time / 60.0:.4f} min")
-
 
 if __name__ == "__main__":
     main()
