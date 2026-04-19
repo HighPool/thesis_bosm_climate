@@ -41,16 +41,14 @@ Obsahuje hlavné experimentálne skripty. Tieto skripty:
 
 ### `results/`
 Obsahuje výsledky experimentov a pomocné skripty pre porovnanie výsledkov.
-
-`results/final/turbo/` — finálne výstupy TuRBO
-`results/final/random_search/` — finálne výstupy Random Search
-`results/final/pybads/` — finálne výstupy pyBADS
-`build_comparison_summary.py` — vytvorenie globálneho porovnania metód
-`build_per_problem_comparison.py` — vytvorenie porovnania po jednotlivých problémoch
+- `results/final/turbo/` — finálne výstupy TuRBO
+- `results/final/random_search/` — finálne výstupy Random Search
+- `results/final/pybads/` — finálne výstupy pyBADS
+- `build_comparison_summary.py` — vytvorenie globálneho porovnania metód
+- `build_per_problem_comparison.py` — vytvorenie porovnania po jednotlivých problémoch
 
 ### `data/laqn/2015/preprocessed/`
 Obsahuje predspracované problémové inštancie LAQN vo formáte `.p`.
-
 
 ## Príprava prostredia
 V koreňovom adresári projektu spustite:
@@ -113,9 +111,9 @@ Obsahuje:
 
 ## IOHanalyzer
 CSV výstupy je možné nahrať do webového rozhrania IOHanalyzer namapovaním následujúcich stĺpcov:
-`evaluation`    → Evaluation counter
-`best_so_far_y` → Function values
-`problem_id`    → Function ID
-`algorithm_id`  → Algorithm ID
-`dimension`     → Problem dimension
-`run_id`        → Run ID
+- `evaluation`    → Evaluation counter
+- `best_so_far_y` → Function values
+- `problem_id`    → Function ID
+- `algorithm_id`  → Algorithm ID
+- `dimension`     → Problem dimension
+- `run_id`        → Run ID
