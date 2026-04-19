@@ -32,7 +32,7 @@ Slúži na rýchle overenie správnosti implementácie
 
 from pathlib import Path
 
-from optimizers.pybads_laqn import load_problem, run_pybads_on_problem
+from optimizers.laqn.pybads_laqn import load_problem, run_pybads_on_problem
 
 
 def main():

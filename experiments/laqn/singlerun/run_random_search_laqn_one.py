@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from optimizers.random_search_laqn import load_problem, run_random_search_laqn
+from optimizers.laqn.random_search_laqn import load_problem, run_random_search_laqn
 
 """
 Testovacie spustenie metódy Random Search na jednej LAQN úlohe

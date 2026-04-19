@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from optimizers.turbo_laqn import load_problem, run_turbo_on_problem
+from optimizers.laqn.turbo_laqn import load_problem, run_turbo_on_problem
 
 """
 Testovacie spustenie algoritmu TuRBO na jednej LAQN úlohe
