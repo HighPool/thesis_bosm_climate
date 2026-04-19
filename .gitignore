@@ -1,4 +1,4 @@
 .venv/
-results/final/pybads/per_problem/*.json
-results/final/random_search/per_problem/*.json
-results/final/turbo/per_problem/*.json
+*.pyc
+results/**/*.csv
+results/**/*.json

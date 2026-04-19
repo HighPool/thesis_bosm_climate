@@ -2,47 +2,50 @@ from __future__ import annotations
 import time
 import csv
 import json
-from pathlib import Path
 import numpy as np
-from optimizers.random_search_laqn import load_problem, run_random_search_laqn
+from pathlib import Path
+from optimizers.laqn.turbo_laqn import load_problem, run_turbo_on_problem
 
 """
-Multirun experiment metódy Random Search na úlohách LAQN
+Multirun experiment metódy TuRBO na úlohách LAQN
 - načíta všetky problémové inštancie z určeného priečinka
 - na každej úlohe vykoná viac behov algoritmu
 - agreguje metriky cez behy pre každú úlohu zvlášť
 - vytvorí globálny súhrn cez všetky úlohy
 - uloží výsledky do summary JSON
-- uloží per-run JSON
+- uloží detailné run-level JSON súbory po problémoch
 - a vytvorí CSV výstup pre IOHanalyzer
 
-Toto je experimentálny skript
+Toto je experimentálny skript 
 """
 
 def main():
     # Meranie celkového času batch experimentu
     batch_start = time.perf_counter()
+
+    # Cesta pre vstupné dáta
     problem_dir = Path("data/laqn/2015/preprocessed")
 
-    # Výstupná štruktúra pre výsledky Random Search metódy
-    base_out_dir = Path("results/final/random_search")
+    # Experimentálne nastavenie
+    budget = 10
+    n_runs = 20
+    algorithm_name = "TuRBO"
+
+    experiment_tag = f"budget{budget}_runs{n_runs}"
+
+    # Výstupná štruktúra pre výsledky TuRBO algoritmu
+    base_out_dir = Path("results/laqn/final") / experiment_tag / "turbo"
     per_problem_dir = base_out_dir / "per_problem"
     base_out_dir.mkdir(parents=True, exist_ok=True)
     per_problem_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = base_out_dir / "random_search_summary_2015_budget500_runs20.json"
-    csv_path = base_out_dir / "random_search_ioh_2015_budget500_runs20.csv"
+    summary_path = base_out_dir / f"turbo_summary_2015_budget{budget}_runs{n_runs}.json"
+    csv_path = base_out_dir / f"turbo_ioh_2015_budget{budget}_runs{n_runs}.csv"
 
     # Načítanie všetkých inštancií problémov
     problem_files = sorted(problem_dir.glob("*.p"))
     if not problem_files:
         raise FileNotFoundError(f"V {problem_dir} sa nenašli žiadne .p súbory.")
-
-    # Experimentálne nastavenie
-    budget = 500
-    n_runs = 20
-    include_initial = True
-    algorithm_name = "RandomSearch"
 
     all_problem_summaries = []
 
@@ -85,12 +88,12 @@ def main():
             for run_idx in range(n_runs):
                 print(f"  run {run_idx + 1}/{n_runs}", flush=True)
 
-                result = run_random_search_laqn(
+                result = run_turbo_on_problem(
                     problem=problem,
-                    budget=budget,
-                    seed=run_idx,
-                    include_initial=include_initial,
+                    total_budget=budget,
+                    random_seed=run_idx,
                     run_id=run_idx + 1,
+                    verbose=False,
                 )
 
                 # Uloženie metrík jedného behu
@@ -171,7 +174,7 @@ def main():
 
             all_problem_summaries.append(summary)
 
-            # per-run výsledky úlohy sa uložia samostatne
+            # Detailné výsledky tejto úlohy sa uložia samostatne
             per_problem_payload = {
                 "algorithm_name": algorithm_name,
                 "problem_id": str(problem.identifier),
@@ -195,7 +198,7 @@ def main():
                 f"mean_unique={summary['mean_unique_eval_count']:.2f}"
             )
 
-    # Globálna agregácia všetkých problémových inštancií
+    # Globálna agregácia cez všetky problémové inštancie
     mean_deviations = np.array([p["mean_deviation"] for p in all_problem_summaries], dtype=float)
     success_rates = np.array([p["success_rate"] for p in all_problem_summaries], dtype=float)
     mean_best_values = np.array([p["mean_best_y"] for p in all_problem_summaries], dtype=float)
@@ -203,6 +206,7 @@ def main():
     mean_times = np.array([p["mean_total_time"] for p in all_problem_summaries], dtype=float)
     mean_unique_counts = np.array([p["mean_unique_eval_count"] for p in all_problem_summaries], dtype=float)
     mean_call_counts = np.array([p["mean_call_count"] for p in all_problem_summaries], dtype=float)
+
     min_curve_len = min(len(p["mean_curve"]) for p in all_problem_summaries)
     all_problem_mean_curves = np.array(
         [p["mean_curve"][:min_curve_len] for p in all_problem_summaries],
@@ -238,7 +242,6 @@ def main():
             "problem_dir": str(problem_dir),
             "budget": budget,
             "n_runs": n_runs,
-            "include_initial": include_initial,
             "counting_mode": "algorithm_calls",
         },
         "summary": global_summary,
@@ -252,7 +255,6 @@ def main():
     print(f"Saved IOHanalyzer CSV to: {csv_path}")
     print(f"Batch total time: {batch_total_time:.4f} s")
     print(f"Batch total time: {batch_total_time / 60.0:.4f} min")
-
 
 if __name__ == "__main__":
     main()

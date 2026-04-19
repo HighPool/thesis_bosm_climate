@@ -2,12 +2,12 @@ from __future__ import annotations
 import time
 import csv
 import json
-import numpy as np
 from pathlib import Path
-from optimizers.turbo_laqn import load_problem, run_turbo_on_problem
+import numpy as np
+from optimizers.laqn.pybads_laqn import load_problem, run_pybads_on_problem
 
 """
-Multirun experiment metódy TuRBO na úlohách LAQN
+Multirun experiment algoritmu pyBADS na úlohách LAQN
 - načíta všetky problémové inštancie z určeného priečinka
 - na každej úlohe vykoná viac behov algoritmu
 - agreguje metriky cez behy pre každú úlohu zvlášť
@@ -16,7 +16,7 @@ Multirun experiment metódy TuRBO na úlohách LAQN
 - uloží detailné run-level JSON súbory po problémoch
 - a vytvorí CSV výstup pre IOHanalyzer
 
-Toto je experimentálny skript 
+Toto je experimentálny skript určený na finálne dávkové vyhodnotenie.
 """
 
 def main():
@@ -26,24 +26,27 @@ def main():
     # Cesta pre vstupné dáta
     problem_dir = Path("data/laqn/2015/preprocessed")
 
-    # Výstupná štruktúra pre výsledky TuRBO algoritmu
-    base_out_dir = Path("results/final/turbo")
+    # Experimentálne nastavenie
+    budget = 10
+    n_runs = 20
+    display = "off"
+    algorithm_name = "PyBADS"
+
+    experiment_tag = f"budget{budget}_runs{n_runs}"
+
+    # Výstupná štruktúra pre výsledky pyBADS algoritmu
+    base_out_dir = Path("results/laqn/final") / experiment_tag / "pybads"
     per_problem_dir = base_out_dir / "per_problem"
     base_out_dir.mkdir(parents=True, exist_ok=True)
     per_problem_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = base_out_dir / "turbo_summary_2015_budget500_runs20.json"
-    csv_path = base_out_dir / "turbo_ioh_2015_budget500_runs20.csv"
+    summary_path = base_out_dir / f"pybads_summary_2015_budget{budget}_runs{n_runs}.json"
+    csv_path = base_out_dir / f"pybads_ioh_2015_budget{budget}_runs{n_runs}.csv"
 
     # Načítanie všetkých inštancií problémov
     problem_files = sorted(problem_dir.glob("*.p"))
     if not problem_files:
         raise FileNotFoundError(f"V {problem_dir} sa nenašli žiadne .p súbory.")
-
-    # Experimentálne nastavenie
-    budget = 500
-    n_runs = 20
-    algorithm_name = "TuRBO"
 
     all_problem_summaries = []
 
@@ -86,12 +89,12 @@ def main():
             for run_idx in range(n_runs):
                 print(f"  run {run_idx + 1}/{n_runs}", flush=True)
 
-                result = run_turbo_on_problem(
+                result = run_pybads_on_problem(
                     problem=problem,
                     total_budget=budget,
                     random_seed=run_idx,
                     run_id=run_idx + 1,
-                    verbose=False,
+                    display=display,
                 )
 
                 # Uloženie metrík jedného behu
@@ -172,7 +175,7 @@ def main():
 
             all_problem_summaries.append(summary)
 
-            # Detailné výsledky tejto úlohy sa uložia samostatne
+            # per-run výsledky úlohy sa uložia samostatne
             per_problem_payload = {
                 "algorithm_name": algorithm_name,
                 "problem_id": str(problem.identifier),
@@ -240,6 +243,7 @@ def main():
             "problem_dir": str(problem_dir),
             "budget": budget,
             "n_runs": n_runs,
+            "display": display,
             "counting_mode": "algorithm_calls",
         },
         "summary": global_summary,
