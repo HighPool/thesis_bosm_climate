@@ -87,7 +87,7 @@ V rámci každého experimentálneho priečinka sa nachádzajú:
 * priečinok `comparison_summary/` pre globálne porovnanie algoritmov,
 * priečinok `per_problem_comparison/` pre porovnanie po jednotlivých problémových inštanciách.
 
-Typická štruktúra vyzerá takto:
+Štruktúra repozitára:
 
 ```text
 results/laqn/final/budget10_runs20/
@@ -196,9 +196,6 @@ Každý multirun skript vytvára tri úrovne výstupov:
 ### 1. Summary JSON
 
 Agregované výsledky celej metódy cez všetky problémy.
-
-Obsahuje napríklad:
-
 * priemernú odchýlku od optima,
 * medián odchýlky,
 * smerodajnú odchýlku,
