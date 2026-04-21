@@ -21,7 +21,7 @@ def main():
     run_id = 1
 
     surrogate_type = "poly"
-    strategy_type = "srbf"
+    strategy_type = "dycors"
 
     n_init = 10
     batch_size = 1
