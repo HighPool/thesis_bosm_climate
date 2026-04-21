@@ -1,11 +1,11 @@
 from __future__ import annotations
-
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
 import time
 import numpy as np
-
+import warnings
+from sklearn.exceptions import ConvergenceWarning
 from poap.controller import SerialController
 
 from pySOT.surrogate import (
@@ -318,7 +318,9 @@ def run_pysot_wind(
             f"strategy={strategy_type}, budget={budget}, n_init={n_init}"
         )
 
-    controller.run()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+        controller.run()
 
     total_time = time.perf_counter() - start_total
 

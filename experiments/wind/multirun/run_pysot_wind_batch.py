@@ -23,8 +23,8 @@ def main():
     n_samples = 5
 
     # Konfigurácia pySOT kombinácie
-    surrogate_type = "rbf"
-    strategy_type = "dycors"
+    surrogate_type = "gp"
+    strategy_type = "ei"
 
     # Experimentálne nastavenie
     budget = 20
