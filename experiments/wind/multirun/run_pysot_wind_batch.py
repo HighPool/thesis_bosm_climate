@@ -24,7 +24,7 @@ def main():
 
     # Konfigurácia pySOT kombinácie
     surrogate_type = "gp"
-    strategy_type = "ei"
+    strategy_type = "lcb"
 
     # Experimentálne nastavenie
     budget = 20

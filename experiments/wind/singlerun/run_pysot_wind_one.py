@@ -21,7 +21,7 @@ def main():
     run_id = 1
 
     surrogate_type = "gp"
-    strategy_type = "ei"
+    strategy_type = "lcb"
 
     n_init = 10
     batch_size = 1
