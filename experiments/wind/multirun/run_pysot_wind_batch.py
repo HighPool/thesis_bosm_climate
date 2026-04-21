@@ -24,7 +24,7 @@ def main():
 
     # Konfigurácia pySOT kombinácie
     surrogate_type = "rbf"
-    strategy_type = "srbf"
+    strategy_type = "sop"
 
     # Experimentálne nastavenie
     budget = 20

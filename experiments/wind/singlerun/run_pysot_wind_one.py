@@ -21,7 +21,7 @@ def main():
     run_id = 1
 
     surrogate_type = "rbf"
-    strategy_type = "srbf"
+    strategy_type = "sop"
 
     n_init = 10
     batch_size = 1
