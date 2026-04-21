@@ -20,8 +20,8 @@ def main():
     seed = 0
     run_id = 1
 
-    surrogate_type = "rbf"
-    strategy_type = "sop"
+    surrogate_type = "poly"
+    strategy_type = "srbf"
 
     n_init = 10
     batch_size = 1
