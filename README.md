@@ -1,265 +1,311 @@
 # BOSM Climate
 
-Projekt k diplomovej práci zameranej na optimalizáciu nákladných black-box úloh s využitím náhradných modelov v klimaticky orientovaných aplikáciách. Aktuálna implementácia je zameraná na úlohu rozmiestnenia environmentálnych senzorov odvodenú z dát LAQN a na porovnanie viacerých optimalizačných metód v jednotnom experimentálnom rámci.
+Projekt k diplomovej práci zameranej na optimalizáciu nákladných black-box úloh s využitím náhradných modelov v klimaticky orientovaných aplikáciách.
 
-## Obsah projektu
+Aktuálna implementácia pokrýva dve úlohy:
 
-Projekt obsahuje implementácie a experimentálne skripty pre tieto algoritmy:
+* **LAQN** — rozmiestnenie environmentálnych senzorov odvodené z dát London Air Quality Network
+* **WindWake** — rozmiestnenie veterných turbín nad simulovanou veternou farmou
 
-* TuRBO
-* PyBADS
+Cieľom projektu je porovnať vybrané optimalizačné algoritmy v **jednotnom experimentálnom rámci**, zbierať porovnateľné metriky a vytvárať výstupy vhodné na ďalšiu analýzu a vizualizáciu.
+
+---
+
+## Implementované algoritmy
+
+### Spoločné algoritmy
+
 * Random Search
+* PyBADS
+* TuRBO
 
-Výstupy experimentov sú ukladané tak, aby bolo možné:
+### pySOT kombinácie
 
-* porovnávať každý algoritmus medzi sebou,
-* analyzovať výsledky po problémoch aj globálne,
-* a exportovať priebehy behu každého algoritmu do CSV formátu podľa požadovaného formátu pre IOHanalyzer.
+* RBF + DYCORS
+* RBF + SRBF
+* RBF + SOP
+* GP + EI
+* GP + LCB
+* Poly + DYCORS
+* Poly + SRBF
+* Poly + SOP
 
-Použitý algoritmus PyBADS predstavuje Python implementáciu Bayesian Adaptive Direct Search a repozitár TuRBO poskytuje implementáciu trust-region Bayesian optimization. Úlohy LAQN sú odvodené z rámca LAQN-BO, ktorý slúži na generovanie a spracovanie problémových inštancií z dát London Air Quality Network.
+---
 
-## Štruktúra adresára
+## Experimentálny rámec
+
+Všetky algoritmy sú implementované tak, aby vracali rovnaké základné metriky:
+
+* `X_hist`          — história všetkých navštívených bodov v poradí, v akom ich algoritmus vyhodnotil.
+* `y_hist`          — história hodnôt cieľovej funkcie prislúchajúcich bodom z X_hist.
+* `best_so_far`     — konvergenčná krivka, ktorá po každej evaluácii uchováva najlepšiu dovtedy nájdenú hodnotu.
+* `best_x`          — najlepšie nájdené riešenie, teda bod rozhodovacieho priestoru s najlepšou dosiahnutou hodnotou cieľovej funkcie.
+* `best_y`          — najlepšia dosiahnutá hodnota cieľovej funkcie počas daného behového spustenia.
+* `budget`          — maximálny počet povolených evaluácií cieľovej funkcie v jednom behovom spustení.
+* `call_count`      — skutočný počet vykonaných volaní cieľovej funkcie počas behového spustenia.
+* `evals_to_f_best` — počet evaluácií potrebných na prvé dosiahnutie finálne najlepšieho riešenia.
+* `total_time`      — celkový čas trvania jedného behového spustenia algoritmu.
+
+To umožňuje:
+
+* priame porovnanie algoritmov medzi sebou,
+* agregáciu výsledkov po behoch a po problémoch,
+* export priebehu optimalizácie do CSV pre **IOHanalyzer**.
+
+---
+
+## Štruktúra projektu
+
+### `data/`
+
+Vstupné dáta a problémové inštancie pre obe úlohy.
+
+* `data/laqn/` — predspracované problémové inštancie LAQN
+* `data/wind/` — vstupné súbory pre úlohu rozmiestnenia veterných turbín
 
 ### `optimizers/`
 
-Obsahuje implementačné jadro jednotlivých optimalizačných algoritmov pre úlohy LAQN.
+Implementačné jadro algoritmov.
 
-`turbo_laqn.py`
-`pybads_laqn.py`
-`random_search_laqn.py`
+* `optimizers/laqn/` — implementácie algoritmov pre LAQN
+* `optimizers/wind/` — implementácie algoritmov pre WindWake
 
-### `experiments/singlerun/`
+### `experiments/`
 
-Obsahuje testovacie skripty pre jeden beh algoritmu na jednej problémovej inštancii.
-Tieto skripty slúžia len na rýchle overenie správnosti implementácie a vypisujú metriky priamo do terminálu.
+Skripty pre spúšťanie experimentov.
 
-### `experiments/multirun/`
-
-Obsahuje hlavné experimentálne skripty pre dávkové vyhodnotenie algoritmov na celej sade LAQN úloh.
-
-Tieto skripty:
-
-* prechádzajú všetky problémové inštancie,
-* vykonávajú viac behov každého algoritmu,
-* agregujú metriky po jednotlivých úlohách aj globálne,
-* ukladajú summary JSON,
-* ukladajú detailné run-level JSON súbory po problémoch,
-* a vytvárajú CSV výstup pre IOHanalyzer.
-
-Každý multirun skript používa experimentálne nastavenie definované hodnotami `budget` a `n_runs`. Tieto dve hodnoty určujú nielen priebeh experimentu, ale aj výstupnú štruktúru výsledkov. Výsledky sa ukladajú do priečinka:
-
-`results/laqn/final/budget<budget>_runs<n_runs>/`
-
-V rámci tohto experimentálneho priečinka má každý algoritmus vlastný podpriečinok:
-
-* `random_search/`
-* `turbo/`
-* `pybads/`
-
-Príklad pre `budget = 10` a `n_runs = 20`:
-
-`results/laqn/final/budget10_runs20/random_search/`
-`results/laqn/final/budget10_runs20/turbo/`
-`results/laqn/final/budget10_runs20/pybads/`
+* `experiments/laqn/singlerun/`
+* `experiments/laqn/multirun/`
+* `experiments/wind/singlerun/`
+* `experiments/wind/multirun/`
 
 ### `results/`
 
-Obsahuje výsledky experimentov a pomocné skripty pre porovnanie výsledkov.
+Výstupy experimentov vo forme:
 
-Hlavná logika ukladania je založená na experimentálnom nastavení:
+* summary JSON
+* detailné per-problem JSON
+* CSV pre IOHanalyzer
+* pomocné porovnávacie súbory
 
-* `budget`
-* `n_runs`
+---
 
-Pre každú kombináciu týchto hodnôt sa v priečinku `results/laqn/final/` vytvorí samostatný experimentálny priečinok v tvare:
+## Odporúčaná príprava virutálneho prostredia
 
-`budget<budget>_runs<n_runs>`
+Projekt používa **oddelené virtuálne prostredia** pre úlohy `LAQN` a `WindWake`.
 
-Príklad:
+---
 
-`results/laqn/final/budget10_runs20/`
-`results/laqn/final/budget500_runs20/`
-`results/laqn/final/budget1000_runs30/`
-
-V rámci každého experimentálneho priečinka sa nachádzajú:
-
-* podpriečinky jednotlivých algoritmov (`random_search`, `turbo`, `pybads`),
-* priečinok `comparison_summary/` pre globálne porovnanie algoritmov,
-* priečinok `per_problem_comparison/` pre porovnanie po jednotlivých problémových inštanciách.
-
-Štruktúra repozitára:
-
-```text
-results/laqn/final/budget10_runs20/
-├── random_search/
-│   ├── per_problem/
-│   ├── random_search_summary_2015_budget10_runs20.json
-│   └── random_search_ioh_2015_budget10_runs20.csv
-├── turbo/
-│   ├── per_problem/
-│   ├── turbo_summary_2015_budget10_runs20.json
-│   └── turbo_ioh_2015_budget10_runs20.csv
-├── pybads/
-│   ├── per_problem/
-│   ├── pybads_summary_2015_budget10_runs20.json
-│   └── pybads_ioh_2015_budget10_runs20.csv
-├── comparison_summary/
-│   ├── comparison_summary.json
-│   └── comparison_summary.csv
-└── per_problem_comparison/
-    ├── per_problem_comparison.json
-    └── per_problem_comparison.csv
-```
-
-Pomocné skripty:
-
-* `build_comparison_summary.py` — vytvorenie globálneho porovnania algoritmov pre zvolené experimentálne nastavenie
-* `build_per_problem_comparison.py` — vytvorenie porovnania po jednotlivých úlohách pre zvolené experimentálne nastavenie
-
-### `data/laqn/2015/preprocessed/`
-
-Obsahuje predspracované problémové inštancie LAQN vo formáte `.p`.
-
-## Príprava prostredia
-
-V koreňovom adresári projektu spustite:
+## Prostredie pre LAQN
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-laqn.txt
 ```
 
-Tento príkaz pripraví prostredie, ale aktivácia `.venv` platí len pre daný shell.
+---
 
-## Spúšťanie testovacích skriptov
-
-Tieto skripty vykonajú jeden beh a vypíšu metriky do terminálu.
-
-### Random Search
+## Prostredie pre WindWake
 
 ```bash
-python3 -m experiments.singlerun.run_random_search_laqn_one
+python3 -m venv .venv_wind
+source .venv_wind/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-wind.txt
+python scripts/apply_pysot_patches.py
 ```
 
-### TuRBO
+### Poznámka k `pySOT`
+
+Pre wind úlohu sa používa knižnica `pySOT`, pri ktorej bolo potrebné opraviť viacero kompatibilitných problémov voči novším verziám `NumPy` a pri výpočte niektorých akvizičných / merit funkcií.
+
+Tieto opravy sú automatizované skriptom:
 
 ```bash
-python3 -m experiments.singlerun.run_turbo_laqn_one
+python utils/apply_pysot_patches.py
 ```
 
-### pyBADS
+Tento krok je potrebné vykonať po inštalácii `requirements-wind.txt` vo virtuálnom prostredí `.venv_wind`.
+
+---
+
+## Spúšťanie testovacích behov
+
+Testovacie skripty slúžia na rýchle overenie správnosti implementácie jedného algoritmu na jednej úlohe.
+
+### LAQN
 
 ```bash
-python3 -m experiments.singlerun.run_pybads_laqn_one
+python3 -m experiments.laqn.singlerun.run_random_search_laqn_one
+```
+```bash
+python3 -m experiments.laqn.singlerun.run_turbo_laqn_one
+```
+```bash
+python3 -m experiments.laqn.singlerun.run_pybads_laqn_one
 ```
 
-## Spúšťanie multirun experimentov
-
-Tieto skripty vykonávajú finálne experimenty nad všetkými problémovými inštanciami.
-
-Každý skript má vo svojom vnútri definované experimentálne nastavenie `budget` a `n_runs`. Tieto hodnoty určujú priebeh experimentu aj názvy a umiestnenie výstupných súborov.
-
-### Random Search
+### WindWake
 
 ```bash
-python3 -m experiments.multirun.run_random_search_laqn_batch
+python3 -m experiments.wind.singlerun.run_random_search_wind_one
+```
+```bash
+python3 -m experiments.wind.singlerun.run_turbo_wind_one
+```
+```bash
+python3 -m experiments.wind.singlerun.run_pybads_wind_one
 ```
 
-### TuRBO
+Konkrétna kombinácia náhradného modelu a stratégie pre selekciu ďalších bodov algoritmu `pySOT` sa nastavuje priamo v `run_pysot_wind_one.py` pomocou:
+
+* `surrogate_type`
+* `strategy_type`
 
 ```bash
-python3 -m experiments.multirun.run_turbo_laqn_batch
+python3 -m experiments.wind.singlerun.run_pysot_wind_one
 ```
+---
 
-### pyBADS
+## Multirun experimentov
+
+Finálne experimenty sa vykonávajú pomocou batch skriptov. Výstupný priečinok je pomenovaný hlavne podľa budget a n_runs, ale samotný priebeh experimentu závisí aj od ďalších parametrov. Tie možno rozdeliť na parametre batch experimentu, parametre algoritmu a parametre úlohy.
+
+### Parametre batch experimentu
+
+Tieto parametre riadia rozsah experimentu bez ohľadu na použitý algoritmus.
+
+* `budget` — určuje maximálny počet evaluácií cieľovej funkcie v jednom behu.
+* `n_runs` — určuje počet nezávislých behov pre rovnakú konfiguráciu.
+* `seed`   — určuje inicializáciu náhodnosti naprieč behovými spusteniami.
+
+Nastavujú sa v batch skriptoch:
+
+* `experiments/laqn/multirun/`
+* `experiments/wind/multirun/`
+
+### Parametre algoritmu
+
+Tieto parametre ovplyvňujú spôsob, akým algoritmus navrhuje a hodnotí nové body.
+
+* `n_init`           — určuje veľkosť počiatočnej vzorky.
+* `batch_size`       — určuje počet bodov navrhovaných naraz.
+* `use_ard`          — určuje, či sa pri GP modeluje samostatná citlivosť každého rozmeru.
+* `n_training_steps` — určuje počet krokov tréningu surrogate modelu.
+* `surrogate_type`   — pri pySOT určuje typ náhradného modelu.
+* `strategy_type`    — pri pySOT určuje stratégiu výberu ďalšieho bodu.
+* `num_cand`         — určuje počet kandidátskych bodov pri kandidátových stratégiách.
+* `use_restarts`     — určuje, či sa stratégia môže znovu inicializovať.
+* `asynchronous`     — určuje, či stratégia pracuje asynchrónne.
+
+Kde sa nastavujú:
+
+* `optimizers/laqn/`
+* `optimizers/wind/`
+
+čiastočne aj vo volajúcich skriptoch v `experiments/...`
+
+* `TuRBO`         → turbo_laqn.py, turbo_wind.py
+* `PyBADS`        → pybads_laqn.py, pybads_wind.py
+* `pySOT`         → pysot_wind.py
+* `Random Search` → random_search_laqn.py, random_search_wind.py
+
+### Parametre úlohy
+
+Tieto parametre ovplyvňujú samotnú definíciu riešeného problému.
+
+`LAQN`
+
+výber problémových inštancií — určuje, nad akými úlohami sa experiment vykonáva
+`include_initial`            — určuje, či sa použijú počiatočné body zo samotnej inštancie
+
+Kde sa nastavujú:
+
+výber inštancií v `experiments/laqn/singlerun/` a `experiments/laqn/multirun/`
+logika počiatočných bodov najmä v `optimizers/laqn/`
+
+Spúšťanie skritpov:
 
 ```bash
-python3 -m experiments.multirun.run_pybads_laqn_batch
+python3 -m experiments.laqn.multirun.run_random_search_laqn_batch
 ```
+```bash
+python3 -m experiments.laqn.multirun.run_turbo_laqn_batch
+```
+```bash
+python3 -m experiments.laqn.multirun.run_pybads_laqn_batch
+```
+
+`WindWake`
+
+* `n_turbines` — určuje počet turbín a tým aj dimenziu problému
+* `wind_seed`  — určuje generovanie veterných podmienok
+* `n_samples`  — určuje počet opakovaných vzoriek pri evaluácii
+
+Kde sa nastavujú:
+
+v `optimizers/wind/`
+a konkrétne hodnoty vo volajúcich skriptoch v `experiments/wind/singlerun/` a `experiments/wind/multirun/`
+
+
+Spúšťanie skritpov:
+
+```bash
+python3 -m experiments.wind.multirun.run_random_search_wind_batch
+```
+```bash
+python3 -m experiments.wind.multirun.run_turbo_wind_batch
+```
+```bash
+python3 -m experiments.wind.multirun.run_pybads_wind_batch
+```
+
+Konkrétna kombinácia náhradného modelu a stratégie pre selekciu ďalších bodov algoritmu `pySOT` sa nastavuje priamo v `run_pysot_wind_batch.py` pomocou:
+
+* `surrogate_type`
+* `strategy_type`
+
+```bash
+python3 -m experiments.wind.multirun.run_pysot_wind_batch
+```
+
+---
 
 ## Výstupy experimentov
 
-Každý multirun skript vytvára výstupy, ktorých názvy aj umiestnenie zodpovedajú konkrétnemu experimentálnemu nastaveniu `budget` a `n_runs`.
+Výstupy sa ukladajú podľa experimentálneho nastavenia:
 
-Pre algoritmus Random Search a nastavenie `budget = 10`, `n_runs = 20` sa napríklad vytvoria súbory:
+results/<task>/final/budget<budget>_runs<n_runs>/
 
-* `random_search_summary_2015_budget10_runs20.json`
-* `random_search_ioh_2015_budget10_runs20.csv`
+Výsledky jednotlivých pySOT kombinácií sa ukladajú do samostatných priečinkov, napríklad:
 
-Analogicky sa pomenúvajú aj výstupy metód TuRBO a pyBADS.
+* `pysot_rbf_dycors`
+* `pysot_gp_ei`
+* `pysot_gp_lcb`
 
-Tieto súbory sa ukladajú do algoritmického podpriečinka patriaceho danému experimentu, napríklad:
-
-`results/laqn/final/budget10_runs20/random_search/`
-
-Každý multirun skript vytvára tri úrovne výstupov:
+Každý algoritmus vytvára:
 
 ### 1. Summary JSON
 
-Agregované výsledky celej metódy cez všetky problémy.
-* priemernú odchýlku od optima,
-* medián odchýlky,
-* smerodajnú odchýlku,
-* úspešnosť,
-* priemerný počet evaluácií do najlepšieho riešenia,
-* priemerný čas jedného behového spustenia,
-* priemerný počet unikátne navštívených lokalít,
-* celkový čas batch experimentu.
+Agregované výsledky metódy cez všetky behy alebo problémy.
 
-### 2. Per-problem run-level JSON
+### 2. Per-problem JSON
 
-Detailné výsledky po jednotlivých problémoch a behoch.
-
-Tieto súbory sa ukladajú do podpriečinka:
-
-`per_problem/`
-
-v rámci adresára konkrétneho algoritmu.
+Detailné výsledky jednotlivých behov.
 
 ### 3. IOHanalyzer CSV
 
-Run-level CSV súbor s priebehom evaluácií, vhodný na nahratie do IOHanalyzer.
+CSV výstup s priebehom evaluácií pre vizualizáciu a porovnanie.
 
-## Porovnanie výsledkov medzi algoritmami
-
-Po dobehnutí multirun experimentov je možné vytvoriť dve porovnávacie tabuľky pre konkrétne experimentálne nastavenie.
-
-### Globálne porovnanie algoritmov
-
-```bash
-python3 results/laqn/build_comparison_summary.py <budget> <n_runs>
-```
-
-Príklad:
-
-```bash
-python3 results/laqn/build_comparison_summary.py 10 20
-```
-
-Výstupy sa uložia do:
-
-* `results/laqn/final/budget10_runs20/comparison_summary/comparison_summary.json`
-* `results/laqn/final/budget10_runs20/comparison_summary/comparison_summary.csv`
-
-### Porovnanie po jednotlivých problémoch
-
-```bash
-python3 results/laqn/build_per_problem_comparison.py <budget> <n_runs>
-```
-
-Príklad:
-
-```bash
-python3 results/laqn/build_per_problem_comparison.py 10 20
-```
-
-Výstupy sa uložia do:
-
-* `results/laqn/final/budget10_runs20/per_problem_comparison/per_problem_comparison.json`
-* `results/laqn/final/budget10_runs20/per_problem_comparison/per_problem_comparison.csv`
+---
 
 ## IOHanalyzer
 
-CSV výstupy je možné nahrať do webového rozhrania IOHanalyzer namapovaním nasledujúcich stĺpcov:
+CSV výstupy je možné nahrať do webového rozhrania **IOHanalyzer**.
+
+Mapovanie stĺpcov:
 
 * `evaluation`    → Evaluation counter
 * `best_so_far_y` → Function values
@@ -268,15 +314,39 @@ CSV výstupy je možné nahrať do webového rozhrania IOHanalyzer namapovaním 
 * `dimension`     → Problem dimension
 * `run_id`        → Run ID
 
-## Použité externé repozitáre
+---
 
-Pri implementácii a príprave experimentálneho rámca sa vychádzalo najmä z týchto externých repozitárov:
+## Porovnanie výsledkov
 
-* **PyBADS** — Python implementácia algoritmu Bayesian Adaptive Direct Search
-  Repozitár: `https://github.com/acerbilab/pybads`
+Pre LAQN sú v projekte aj pomocné skripty na tvorbu porovnávacích tabuliek medzi algoritmami:
 
-* **TuRBO** — trust-region Bayesian optimization framework použitý ako základ implementácie metódy TuRBO
-  Repozitár: `https://github.com/uber-research/TuRBO`
+```bash
+python3 results/laqn/build_comparison_summary.py <budget> <n_runs>
+python3 results/laqn/build_per_problem_comparison.py <budget> <n_runs>
+```
 
-* **LAQN-BO** — rámec na spracovanie a generovanie problémových inštancií odvodených z dát London Air Quality Network
-  Repozitár: `https://github.com/sighellan/LAQN-BO`
+Tieto skripty vytvárajú:
+
+* globálne porovnanie algoritmov,
+* porovnanie po jednotlivých problémových inštanciách.
+
+---
+
+## Použité externé repozitáre a frameworky
+
+* **PyBADS**  — Bayesian Adaptive Direct Search
+* **TuRBO**   — trust-region Bayesian optimization
+* **pySOT**   — Surrogate Optimization Toolbox
+* **LAQN-BO** — rámec na generovanie a spracovanie LAQN úloh
+* **FLORIS**  — simulácia pre úlohu rozmiestnenia veterných turbín
+
+---
+
+## Stav projektu
+
+Projekt obsahuje:
+
+* implementáciu algoritmov pre obe úlohy,
+* jednotný experimentálny rámec,
+* export výstupov do JSON a CSV,
+* základ pre ďalšie porovnanie algoritmov v diplomovej práci.

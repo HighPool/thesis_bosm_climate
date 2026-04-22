@@ -1,7 +1,0 @@
-numpy
-scipy
-torch
-gpytorch
-scikit-learn
-pybads
-git+https://github.com/uber-research/TuRBO.git#egg=turbo
