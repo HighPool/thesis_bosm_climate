@@ -30,12 +30,12 @@ def main():
     file_path = Path("data/wind/windwake_input.json")
 
     # Konfigurácia windwake úlohy
-    n_turbines = 3
+    n_turbines = 5
     wind_seed = 0
     n_samples = 5
 
     # Experimentálne nastavenie
-    budget = 20
+    budget = 500
     n_runs = 20
     algorithm_name = "RandomSearch"
 
@@ -53,13 +53,6 @@ def main():
     csv_path = (
         base_out_dir
         / f"random_search_ioh_wind_n{n_turbines}_budget{budget}_runs{n_runs}.csv"
-    )
-
-    problem = make_windwake_problem(
-        file_path=file_path,
-        n_turbines=n_turbines,
-        wind_seed=wind_seed,
-        n_samples=n_samples,
     )
 
     best_values = []
@@ -86,6 +79,13 @@ def main():
 
         for run_idx in range(n_runs):
             print(f"run {run_idx + 1}/{n_runs}", flush=True)
+
+            problem = make_windwake_problem(
+                file_path=file_path,
+                n_turbines=n_turbines,
+                wind_seed=wind_seed,
+                n_samples=n_samples,
+            )
 
             result = run_random_search_wind(
                 problem=problem,
@@ -126,6 +126,12 @@ def main():
         dtype=float,
     )
 
+    problem = make_windwake_problem(
+        file_path=file_path,
+        n_turbines=n_turbines,
+        wind_seed=wind_seed,
+        n_samples=n_samples,
+    )
     problem_id = f"windwake_n{n_turbines}_wseed{wind_seed}"
 
     summary = {

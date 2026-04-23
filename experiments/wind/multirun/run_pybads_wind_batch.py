@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import time
 import csv
 import json
@@ -17,11 +16,13 @@ def main():
 
     file_path = Path("data/wind/windwake_input.json")
 
-    n_turbines = 3
+    # Konfigurácia windwake úlohy
+    n_turbines = 5
     wind_seed = 0
     n_samples = 5
 
-    budget = 20
+    # Experimentálne nastavenie
+    budget = 500
     n_runs = 20
     algorithm_name = "PyBADS"
 
@@ -65,6 +66,7 @@ def main():
 
         for run_idx in range(n_runs):
             print(f"run {run_idx + 1}/{n_runs}", flush=True)
+            run_start = time.perf_counter()
 
             problem = make_windwake_problem(
                 file_path=file_path,
@@ -78,6 +80,12 @@ def main():
                 budget=budget,
                 seed=run_idx,
                 run_id=run_idx + 1,
+            )
+
+            run_time = time.perf_counter() - run_start
+            print(
+                f"completed run {run_idx + 1}/{n_runs} in {run_time:.2f} s",
+                flush=True,
             )
 
             best_values.append(float(result.best_y))
@@ -112,6 +120,12 @@ def main():
         dtype=float,
     )
 
+    problem = make_windwake_problem(
+        file_path=file_path,
+        n_turbines=n_turbines,
+        wind_seed=wind_seed,
+        n_samples=n_samples,
+    )
     problem_id = f"windwake_n{n_turbines}_wseed{wind_seed}"
 
     summary = {

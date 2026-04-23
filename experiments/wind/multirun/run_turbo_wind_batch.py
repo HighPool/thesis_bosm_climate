@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import time
 import csv
 import json
@@ -11,21 +10,20 @@ from optimizers.wind.turbo_wind import (
     run_turbo_wind,
 )
 
-
 def main():
     batch_start = time.perf_counter()
 
     file_path = Path("data/wind/windwake_input.json")
 
-    n_turbines = 3
+    n_turbines = 5
     wind_seed = 0
     n_samples = 5
 
-    budget = 20
+    budget = 500
     n_runs = 20
     algorithm_name = "TuRBO"
 
-    n_init = 5
+    n_init = 20
     batch_size = 1
     use_ard = True
     n_training_steps = 50
@@ -224,7 +222,6 @@ def main():
     print(f"Saved IOHanalyzer CSV to: {csv_path}")
     print(f"Batch total time: {batch_total_time:.4f} s")
     print(f"Batch total time: {batch_total_time / 60.0:.4f} min")
-
 
 if __name__ == "__main__":
     main()

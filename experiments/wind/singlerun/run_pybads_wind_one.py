@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -7,7 +6,6 @@ from optimizers.wind.pybads_wind import (
     make_windwake_problem,
     run_pybads_wind,
 )
-
 
 def main():
     file_path = Path("data/wind/windwake_input.json")

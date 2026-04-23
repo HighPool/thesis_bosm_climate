@@ -1,5 +1,6 @@
 .venv/
 .venv_wind/
+.venv_wind_fresh/
 *.pyc
 results/**/*.csv
 results/**/*.json

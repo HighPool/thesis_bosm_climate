@@ -101,7 +101,7 @@ def run_pybads_wind(
 
     options = {
         "max_fun_evals": int(budget),
-        "display": "iter",
+        "display": "off",
         "random_seed": int(seed),
     }
 
