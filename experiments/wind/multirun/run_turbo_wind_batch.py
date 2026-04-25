@@ -15,7 +15,7 @@ def main():
 
     file_path = Path("data/wind/windwake_input.json")
 
-    n_turbines = 5
+    n_turbines = 10
     wind_seed = 0
     n_samples = 5
 
