@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import time
 import csv
 import json
@@ -11,26 +10,25 @@ from optimizers.wind.pysot_wind import (
     run_pysot_wind,
 )
 
-
 def main():
     batch_start = time.perf_counter()
 
     file_path = Path("data/wind/windwake_input.json")
 
     # Konfigurácia windwake úlohy
-    n_turbines = 3
+    n_turbines = 20
     wind_seed = 0
     n_samples = 5
 
     # Konfigurácia pySOT kombinácie
-    surrogate_type = "poly"
-    strategy_type = "sop"
+    surrogate_type = "gp"
+    strategy_type = "ei"
 
     # Experimentálne nastavenie
-    budget = 20
+    budget = 500
     n_runs = 20
+    n_init = 80
 
-    n_init = 10
     batch_size = 1
     num_cand = 1000
     use_restarts = True
