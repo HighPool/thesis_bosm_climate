@@ -4,3 +4,6 @@
 *.pyc
 results/**/*.csv
 results/**/*.json
+patches/
+scripts/
+utils/
