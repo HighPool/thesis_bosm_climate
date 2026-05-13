@@ -4,6 +4,14 @@
 *.pyc
 results/**/*.csv
 results/**/*.json
-patches/
-scripts/
-utils/
+results/**/*.xlsx
+results/**/*.png
+results/wind/merge_wind_ioh_csv.py
+results/wind/build_wind_tables_xlsx.py
+results/wind/build_wind_tables.py
+results/laqn/build_laqn_ioh_groups_light.py
+results/laqn/build_laqn_ioh_groups.py
+results/laqn/build_laqn_tables_xlsx.py
+results/laqn/build_laqn_tables.py
+results/laqn/build_laqn_ioh_aggregate.py
+build_presentation_results.py

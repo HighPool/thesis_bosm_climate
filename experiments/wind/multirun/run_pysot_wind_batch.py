@@ -16,18 +16,18 @@ def main():
     file_path = Path("data/wind/windwake_input.json")
 
     # Konfigurácia windwake úlohy
-    n_turbines = 20
+    n_turbines = 5
     wind_seed = 0
     n_samples = 5
 
     # Konfigurácia pySOT kombinácie
     surrogate_type = "rbf"
-    strategy_type = "sop"
+    strategy_type = "srbf"
 
     # Experimentálne nastavenie
     budget = 500
     n_runs = 20
-    n_init = 80
+    n_init = 20
 
     batch_size = 1
     num_cand = 1000

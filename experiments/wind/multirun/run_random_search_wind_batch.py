@@ -1,11 +1,9 @@
 from __future__ import annotations
-
 import time
 import csv
 import json
 from pathlib import Path
 import numpy as np
-
 from optimizers.wind.random_search_wind import (
     make_windwake_problem,
     run_random_search_wind,
